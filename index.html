@@ -87,28 +87,34 @@ function initialize(data) {
     if (Array.isArray(previous)) mistakes = new Set(previous.filter(id => byId.has(id)));
   } catch { saved = false; }
   const assignmentIds = [...byId.keys()];
-  let assignment = {answers:{}, submission:null};
+  let assignment = {answers:{}, pairs:[], submission:null};
   try {
     const previous=JSON.parse(localStorage.getItem(assignmentKey)||"null");
     if(previous && previous.answers && typeof previous.answers==="object"){
       assignment.answers=Object.fromEntries(assignmentIds.filter(id=>typeof previous.answers[id]==="boolean").map(id=>[id,previous.answers[id]]));
+      if(Array.isArray(previous.pairs)) {
+        assignment.pairs=words.filter(item=>previous.pairs.includes(item.id)).map(item=>item.id);
+      }
       if(previous.submission?.id) assignment.submission=previous.submission;
     }
   } catch { saved=false; }
   let sending=false;
   let mode,queue,index,points,streak,best,answered,round,version=0;
-  const doneCount = () => Object.keys(assignment.answers).length;
+  const readingDone = () => reading.filter(item=>Object.hasOwn(assignment.answers,item.id)).length;
+  const wordsDone = () => words.filter(item=>Object.hasOwn(assignment.answers,item.id)).length;
+  const doneCount = () => Object.keys(assignment.answers).length+assignment.pairs.length;
+  const requiredCount = assignmentIds.length+words.length;
   const firstScore = () => Object.values(assignment.answers).filter(Boolean).length;
   function saveAssignment() {
     try { localStorage.setItem(assignmentKey,JSON.stringify(assignment)); }
     catch { saved=false; }
   }
   function updateSubmission() {
-    const complete=doneCount()===assignmentIds.length;
+    const complete=doneCount()===requiredCount;
     const sent=assignment.submission?.sent===true;
     $("assignment-progress").textContent=complete
-      ? "全"+assignmentIds.length+"問を完了。初回得点 "+firstScore()+" / "+assignmentIds.length
-      : doneCount()+" / "+assignmentIds.length+"問完了。入試版の内容一致10問とシノニムクイズ35問をすべて解くと提出できます。";
+      ? "全"+requiredCount+"問・組完了。提出する初回得点 "+firstScore()+" / "+assignmentIds.length+"点"
+      : doneCount()+" / "+requiredCount+"問・組完了。内容一致 "+readingDone()+"/"+reading.length+"問、シノニムクイズ "+wordsDone()+"/"+words.length+"問、ペア合わせ "+assignment.pairs.length+"/"+words.length+"組。";
     $("submit-result").hidden=!complete||sent;
     $("restart-assignment").hidden=!sent;
     $("send-result").disabled=sending;
@@ -120,7 +126,7 @@ function initialize(data) {
   }
   async function submitResult(event) {
     event.preventDefault();
-    if(sending || assignment.submission?.sent || doneCount()!==assignmentIds.length) return;
+    if(sending || assignment.submission?.sent || doneCount()!==requiredCount) return;
     const name=$("student-name").value.normalize("NFC").trim();
     if(!name || /\p{Cc}/u.test(name)) {
       $("submission-status").textContent="名前を入力してください。";
@@ -194,6 +200,8 @@ function initialize(data) {
       if(unseen.length) queue=unseen;
     }
     if (chosen==="pairs") {
+      const unmatched=queue.filter(item=>!assignment.pairs.includes(item.id));
+      if(unmatched.length) queue=unmatched;
       const sets=[];
       for (const word of queue) {
         const set=sets.find(group=>group.length<4 && group.every(other=>!overlap(word,other)));
@@ -320,6 +328,11 @@ function initialize(data) {
       if(a.item===c.item){
         const firstTry=!missed.has(a.item.id);
         if(firstTry) {record(a.item,true); score(true);}
+        if(!assignment.pairs.includes(a.item.id)) {
+          assignment.pairs.push(a.item.id);
+          saveAssignment();
+          updateSubmission();
+        }
         round.matched++;
         for(const matched of marks.get(a.item.id)){matched.disabled=true; matched.classList.add("matched");}
         $("feedback").textContent="○ "+a.item.term+"（"+a.item.meaning+"）　"+round.matched+" / "+group.length+" 組";
@@ -347,7 +360,7 @@ function initialize(data) {
   $("submit-result").onsubmit=submitResult;
   $("restart-assignment").onclick=()=>{
     if(!window.confirm("このブラウザーの進捗と復習リストを消して、新しく始めますか？")) return;
-    assignment={answers:{},submission:null};
+    assignment={answers:{},pairs:[],submission:null};
     mistakes.clear();
     saveAssignment();
     try { localStorage.removeItem(keyName); } catch { saved=false; }
