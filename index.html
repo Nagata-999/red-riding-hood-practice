@@ -40,6 +40,7 @@
 <label>名前 <input id="student-name" type="text" name="name" maxlength="60" required autocomplete="off"></label>
 <button id="send-result" class="primary" type="submit">結果を送信</button>
 </form>
+<button id="restart-assignment" type="button" hidden>別の生徒として始める</button>
 <p id="submission-status" class="feedback" role="status"></p>
 </section>
 <details id="passages"><summary>英文を読む</summary><div id="texts"></div></details>
@@ -110,6 +111,7 @@ function initialize(data) {
       ? "全"+assignmentIds.length+"問を完了。初回得点 "+firstScore()+" / "+assignmentIds.length
       : doneCount()+" / "+assignmentIds.length+"問完了。入試版の内容一致10問とシノニムクイズ35問をすべて解くと提出できます。";
     $("submit-result").hidden=!complete||sent;
+    $("restart-assignment").hidden=!sent;
     $("send-result").disabled=sending;
     if(assignment.submission?.name){
       $("student-name").value=assignment.submission.name;
@@ -346,6 +348,17 @@ function initialize(data) {
     }
   }
   $("submit-result").onsubmit=submitResult;
+  $("restart-assignment").onclick=()=>{
+    if(!window.confirm("このブラウザーの進捗と復習リストを消して、新しく始めますか？")) return;
+    assignment={answers:{},submission:null};
+    mistakes.clear();
+    saveAssignment();
+    try { localStorage.removeItem(keyName); } catch { saved=false; }
+    $("student-name").value="";
+    $("student-name").readOnly=false;
+    $("submission-status").textContent="";
+    menu(true);
+  };
   $("unit").onchange=()=>menu();
   $("home").onclick=()=>menu(true);
   $("next").onclick=advance;
